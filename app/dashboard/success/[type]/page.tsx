@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, use } from "react" // Import use
 import Link from "next/link"
 import { CheckCircle, BikeIcon as Motorcycle, Car, Truck, Package } from "lucide-react"
 import { notFound } from "next/navigation"
@@ -45,9 +45,11 @@ const successTypeData = {
   },
 }
 
-export default function SuccessPage({ params }: { params: { type: string } }) {
+// Update the type definition for paramsProp to be a Promise
+export default function SuccessPage({ params: paramsProp }: { params: Promise<{ type: string }> }) {
+  const params = use(paramsProp) // Unwrap params using use()
   const [vehicleType, setVehicleType] = useState<string>("motorcycle")
-  const successType = params.type
+  const successType = params.type // Now accessing unwrapped params
 
   // Validate success type
   useEffect(() => {
@@ -156,15 +158,21 @@ export default function SuccessPage({ params }: { params: { type: string } }) {
       </Card>
 
       <div className="flex gap-4">
-        <Button asChild>
-          <Link href={primaryButtonLink}>{primaryButtonText}</Link>
-        </Button>
+        {/* Removed Button wrappers, applied styles to Link */}
+        <Link
+          href={primaryButtonLink}
+          className="inline-flex items-center justify-center px-4 py-2 font-medium rounded-lg transition-colors bg-primary text-white hover:bg-primary/90" // Primary button styles
+        >
+          {primaryButtonText}
+        </Link>
 
-        <Button variant="outline" asChild>
-          <Link href={secondaryButtonLink}>{secondaryButtonText}</Link>
-        </Button>
+        <Link
+          href={secondaryButtonLink}
+          className="inline-flex items-center justify-center px-4 py-2 font-medium rounded-lg transition-colors border border-primary text-primary hover:bg-primary/10" // Outline button styles
+        >
+          {secondaryButtonText}
+        </Link>
       </div>
     </div>
   )
 }
-
