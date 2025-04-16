@@ -28,6 +28,8 @@ const nextConfig = {
     parallelServerCompiles: false, // Disable parallel compiles
   },
   // serverExternalPackages: ['react-map-gl'], // Removed this as it didn't help
+
+  // Removed rewrites configuration
 }
 
 if (userConfig) {

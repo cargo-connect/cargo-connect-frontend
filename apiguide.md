@@ -1,162 +1,83 @@
-# API Guide for Cargo Connect 
+# API Guide for Cargo Connect
 
-This guide outlines the necessary API endpoints inferred from the current frontend application structure and prepared components.
+This guide outlines the necessary API endpoints based on the backend FastAPI application and the frontend components.
 
 ## API Implementation Strategy
 
-The frontend is prepared assuming the API will be built using **Next.js API Route Handlers** within the `app/api/` directory structure. Frontend components will use relative paths (e.g., `/api/auth/login`) to call these endpoints.
+The frontend interacts with a separate **FastAPI backend application**. Frontend components use the full URL constructed from the `NEXT_PUBLIC_API_BASE_URL` environment variable (e.g., `http://127.0.0.1:8000`) and the specific API path (e.g., `/api/v1/users/register`).
 
-## Core API Endpoints (Required by Current Frontend)
+**Base Path:** All backend routes are prefixed with `/api/v1`.
 
-These endpoints correspond to functionality already present or prepared in the frontend pages.
+## Core API Endpoints (Implemented in Backend)
 
-### Authentication (`app/api/auth/...`)
+These endpoints correspond to functionality implemented in the backend and used by the frontend.
 
-*   `POST /api/auth/signup`
+### Authentication (`/api/v1/users/...`)
+
+*   `POST /api/v1/users/register`
     *   **Purpose:** User registration.
     *   **Used in:** `app/auth/signup/page.tsx` (handleSubmit)
-    *   **Request Body (Example):** `{ fullName, email, phone, password }`
-    *   **Response (Example):** `{ success: true }` or `{ success: false, error: { message: "..." } }`
-*   `POST /api/auth/login`
+    *   **Request Body (JSON):** `{ "full_name": "string", "email": "string", "phone_number": "string", "password": "string" }`
+    *   **Response (Success - 201):** `{ "id": integer, "full_name": "string", "email": "string", "phone_number": "string" }`
+    *   **Response (Error - 422):** Validation error details (e.g., `{ "detail": [...] }`)
+    *   **Notes:** Sends a verification email with a token link upon successful registration.
+*   `POST /api/v1/users/login`
     *   **Purpose:** User login.
     *   **Used in:** `app/auth/login/page.tsx` (handleSubmit)
-    *   **Request Body (Example):** `{ email, password }`
-    *   **Response (Example):** `{ success: true, token: "...", user: { id, name } }` or `{ success: false, error: { message: "..." } }`
-*   `POST /api/auth/verify`
-    *   **Purpose:** Verify OTP or token sent after signup.
-    *   **Used in:** `app/auth/verification/page.tsx` (handleSubmit)
-    *   **Request Body (Example):** `{ otp, /* maybe email/userId */ }`
-    *   **Response (Example):** `{ success: true }` or `{ success: false, error: { message: "Invalid code" } }`
-*   `POST /api/auth/resend-otp` (or similar)
-    *   **Purpose:** Resend verification OTP/token.
-    *   **Used in:** `app/auth/verification/page.tsx` (handleResend)
-    *   **Request Body (Example):** `{ /* maybe email/userId */ }`
-    *   **Response (Example):** `{ success: true, message: "Code resent" }`
-*   `POST /api/auth/change-password` (or similar)
-    *   **Purpose:** Allow logged-in user to change their password.
-    *   **Used in:** `app/dashboard/profile/page.tsx` (handleChangePassword modal)
-    *   **Request Body (Example):** `{ currentPassword, newPassword }`
-    *   **Response (Example):** `{ success: true }`
+    *   **Request Body (Form Data):** `username=user@example.com&password=yourpassword` (Content-Type: `application/x-www-form-urlencoded`)
+    *   **Response (Success - 200):** `{ "access_token": "string", "token_type": "bearer", "user": { "id": integer, "full_name": "string", "email": "string", "phone_number": "string" } }`
+    *   **Response (Error - 401/422):** Authentication failure or validation error.
+*   `POST /api/v1/users/verify-email/{token}`
+    *   **Purpose:** Verify user's email address using the token from the verification link.
+    *   **Used in:** Backend handles this when user clicks the email link. Frontend might have a confirmation page or redirect upon success.
+    *   **Response (Success - 200):** `{ "message": "Email verified successfully" }`
+    *   **Response (Error - 400/404):** Invalid/expired token or user not found.
+*   `POST /api/v1/users/resend-verification`
+    *   **Purpose:** Resend the verification email. **Requires authentication.**
+    *   **Used in:** Not currently implemented in frontend verification page. Could be added to login or profile if user is logged in but not verified.
+    *   **Response (Success - 200):** `{ "message": "Verification email sent successfully" }`
+    *   **Response (Error - 400):** Email already verified.
+*   `GET /api/v1/users/me`
+    *   **Purpose:** Get information about the currently authenticated and verified user. **Requires authentication.**
+    *   **Used in:** Potentially in `app/dashboard/profile/page.tsx`, `app/dashboard/page.tsx`, etc. to fetch user data after login.
+    *   **Response (Success - 200):** `{ "id": integer, "full_name": "string", "email": "string", "phone_number": "string" }`
+    *   **Response (Error - 401/403):** Not authenticated or not verified.
 
-### User Profile & Settings (`app/api/user/...`)
+*(Note: Endpoints for password change, profile update, settings, etc. inferred from the frontend UI are not present in the provided backend code (`user.py`) and would need to be added to the backend if required.)*
 
-*   `GET /api/user/profile`
-    *   **Purpose:** Fetch profile data for the logged-in user.
-    *   **Used in:** `app/dashboard/profile/page.tsx` (useEffect), `app/dashboard/page.tsx` (getDashboardData)
-    *   **Response (Example):** `{ success: true, profile: { id, name, email, phone, address, memberSince } }`
-*   `PUT /api/user/profile`
-    *   **Purpose:** Update profile data for the logged-in user.
-    *   **Used in:** `app/dashboard/profile/page.tsx` (handleUpdateProfile modal)
-    *   **Request Body (Example):** `{ name, email, phone, address }`
-    *   **Response (Example):** `{ success: true, updatedProfile: { ... } }`
-*   `GET /api/user/settings`
-    *   **Purpose:** Fetch user settings (notifications, dark mode, preferences).
-    *   **Used in:** `app/dashboard/settings/page.tsx` (useEffect), `app/dashboard/profile/page.tsx` (useEffect - potentially combined)
-    *   **Response (Example):** `{ success: true, settings: { notificationsEnabled, darkModeEnabled, language, currency, theme, defaultPayment } }`
-*   `PUT /api/user/settings` (or individual endpoints like `/api/user/settings/notifications`)
-    *   **Purpose:** Update user settings (e.g., toggling notifications/dark mode).
-    *   **Used in:** `app/dashboard/settings/page.tsx` (handleSettingChange)
-    *   **Request Body (Example):** `{ notificationsEnabled: true }` or `{ darkModeEnabled: false }`
-    *   **Response (Example):** `{ success: true }`
-*   `PUT /api/user/preferences` (or combined with `/api/user/settings`)
-    *   **Purpose:** Update user preferences (language, currency, etc.).
-    *   **Used in:** `app/dashboard/profile/page.tsx` (handleSavePreferences modal)
-    *   **Request Body (Example):** `{ language, currency, theme, defaultPayment }`
-    *   **Response (Example):** `{ success: true }`
-*   `DELETE /api/user/account` (or similar)
-    *   **Purpose:** Delete the user's account.
-    *   **Used in:** `app/dashboard/profile/page.tsx` (handleDeleteAccount modal)
-    *   **Response (Example):** `{ success: true }`
+### Other Potential Endpoints (Inferred from Frontend UI)
 
-### Shipments / Deliveries (`app/api/shipments/...` or `app/api/deliveries/...`)
+The following endpoints are suggested by the frontend UI but are **not** defined in the provided backend `user.py`. They would need to be implemented in the backend.
 
-*Note: Using "shipments" here, adjust if "deliveries" is preferred.*
+*   `POST /api/v1/users/change-password` (Requires Auth)
+*   `GET /api/v1/users/profile` (Likely same as `/api/v1/users/me`)
+*   `PUT /api/v1/users/profile` (Requires Auth)
+*   `GET /api/v1/users/settings` (Requires Auth)
+*   `PUT /api/v1/users/settings` (Requires Auth)
+*   `DELETE /api/v1/users/account` (Requires Auth)
+*   `POST /api/v1/shipments` (Requires Auth)
+*   `GET /api/v1/shipments` (Requires Auth)
+*   `GET /api/v1/shipments/[id]` (Requires Auth)
+*   `GET /api/v1/shipments/[id]/tracking` (Requires Auth)
+*   `POST /api/v1/booking/confirm` (Requires Auth)
+*   `POST /api/v1/support` (Requires Auth)
 
-*   `POST /api/shipments`
-    *   **Purpose:** Create a new shipment/delivery booking.
-    *   **Used in:** `app/dashboard/book/[vehicleType]/page.tsx` (handleSubmit)
-    *   **Request Body (Example):** `{ vehicleType, pickupAddress, deliveryAddress, packageType, isFragile, senderDetails: { name, phone }, receiverDetails: { name, phone } }`
-    *   **Response (Example):** `{ success: true, shipmentId: "...", trackingNumber: "...", estimatedDelivery: "...", price: ... }`
-*   `GET /api/shipments`
-    *   **Purpose:** List shipments (for history and active shipments list). Supports filtering/pagination.
-    *   **Used in:** `app/dashboard/shipments/page.tsx` (useEffect), `app/dashboard/history/page.tsx` (getDeliveries), `app/dashboard/page.tsx` (getDashboardData - recent)
-    *   **Query Params (Example):** `?status=active`, `?status=completed`, `?limit=10`, `?page=1`, `?sort=date_desc`
-    *   **Response (Example):** `{ success: true, shipments: [ { id, trackingNumber, origin, destination, status, date, time, type } ], totalPages: ... }`
-*   `GET /api/shipments/[id]`
-    *   **Purpose:** Get details for a specific shipment.
-    *   **Used in:** `app/dashboard/shipments/[id]/page.tsx` (useEffect)
-    *   **Response (Example):** `{ success: true, shipment: { id, trackingNumber, ..., locations: { origin, destination, route }, trackingEvents: [...] } }`
-*   `GET /api/shipments/[id]/tracking`
-    *   **Purpose:** Get tracking information/events for a specific shipment. (Could potentially be combined with `GET /api/shipments/[id]`).
-    *   **Used in:** `app/dashboard/track/page.tsx` (useEffect)
-    *   **Response (Example):** `{ success: true, trackingInfo: { rider: { name, phone, location }, delivery: { pickup, destination }, route: [...], status: "...", trackingEvents: [...] } }`
+## HTTP Methods Summary (Implemented Backend Endpoints)
 
-### Booking Confirmation / Payment (`app/api/booking/...` or `app/api/payments/...`)
-
-*   `POST /api/booking/confirm` (or `/api/payments/process`)
-    *   **Purpose:** Confirm the booking details and potentially process payment.
-    *   **Used in:** `app/dashboard/book/confirmation/page.tsx` (handleSubmit)
-    *   **Request Body (Example):** `{ bookingId, paymentMethod, /* card details if applicable */ }`
-    *   **Response (Example):** `{ success: true, confirmationId: "..." }` or `{ success: false, error: { message: "Payment failed" } }`
-
-### Support (`app/api/support/...`)
-
-*   `POST /api/support`
-    *   **Purpose:** Submit a support request message.
-    *   **Used in:** `app/dashboard/profile/page.tsx` (handleSubmitSupport modal)
-    *   **Request Body (Example):** `{ topic, message }`
-    *   **Response (Example):** `{ success: true, message: "Support request received" }`
-
-## HTTP Methods Summary (Core Endpoints)
-
-This table provides a quick overview of the primary HTTP methods for the core endpoints identified above. Note that some endpoints might support additional methods (like PATCH for updates) depending on the specific implementation.
-
-| Endpoint                       | GET | POST | PUT | DELETE | Notes                                      |
-| :----------------------------- | :-: | :--: | :-: | :----: | :----------------------------------------- |
-| `/api/auth/signup`             | ❌  | ✅   | ❌  |   ❌   | User registration                          |
-| `/api/auth/login`              | ❌  | ✅   | ❌  |   ❌   | User login                                 |
-| `/api/auth/verify`             | ❌  | ✅   | ❌  |   ❌   | OTP/Token verification                     |
-| `/api/auth/resend-otp`         | ❌  | ✅   | ❌  |   ❌   | Resend OTP/Token                           |
-| `/api/auth/change-password`    | ❌  | ✅   | ❌  |   ❌   | Update user password                       |
-| `/api/user/profile`            | ✅  | ❌   | ✅  |   ❌   | GET to fetch, PUT to update                |
-| `/api/user/settings`           | ✅  | ❌   | ✅  |   ❌   | GET to fetch, PUT to update (or individual) |
-| `/api/user/preferences`        | ✅  | ❌   | ✅  |   ❌   | GET (likely via settings), PUT to update   |
-| `/api/user/account`            | ❌  | ❌   | ❌  |   ✅   | Delete user account                        |
-| `/api/shipments`               | ✅  | ✅   | ❌  |   ❌   | GET to list, POST to create                |
-| `/api/shipments/[id]`          | ✅  | ❌   | ❌  |   ❌   | GET specific shipment details              |
-| `/api/shipments/[id]/tracking` | ✅  | ❌   | ❌  |   ❌   | GET tracking info (or part of `/[id]`)     |
-| `/api/booking/confirm`         | ❌  | ✅   | ❌  |   ❌   | Confirm booking / Process payment          |
-| `/api/support`                 | ❌  | ✅   | ❌  |   ❌   | Submit support message                     |
-
-## Potential Future API Endpoints 
-
-These endpoints are suggested by common application features but are not yet explicitly required by the current prepared frontend UI elements.
-
-*   `POST /api/booking/calculate`
-    *   **Purpose:** Calculate delivery price dynamically based on inputs before final booking.
-    *   **Needed for:** Dynamic pricing on `app/dashboard/book/[vehicleType]/page.tsx`.
-*   `GET /api/payments/methods`
-    *   **Purpose:** List saved payment methods for the user.
-    *   **Needed for:** Displaying saved cards on profile/settings or checkout.
-*   `POST /api/payments/methods`
-    *   **Purpose:** Add a new payment method.
-    *   **Needed for:** "Add Payment Method" button functionality.
-*   `DELETE /api/payments/methods/[methodId]`
-    *   **Purpose:** Delete a saved payment method.
-    *   **Needed for:** Managing saved payment methods.
-*   `PUT /api/shipments/[id]` (or PATCH)
-    *   **Purpose:** Update shipment details (e.g., cancel, modify address before pickup - if allowed).
-    *   **Needed for:** Potential future shipment management features.
-*   `GET /api/addresses` (or integration with external geocoding)
-    *   **Purpose:** Search/validate addresses.
-    *   **Needed for:** Address input fields in booking/profile if dynamic lookup is desired.
+| Endpoint                          | GET | POST | PUT | DELETE | Notes                                      |
+| :-------------------------------- | :-: | :--: | :-: | :----: | :----------------------------------------- |
+| `/api/v1/users/register`          | ❌  | ✅   | ❌  |   ❌   | User registration                          |
+| `/api/v1/users/login`             | ❌  | ✅   | ❌  |   ❌   | User login (Form Data)                     |
+| `/api/v1/users/verify-email/{token}`| ❌  | ✅   | ❌  |   ❌   | Email verification via link                |
+| `/api/v1/users/resend-verification`| ❌  | ✅   | ❌  |   ❌   | Resend email (Requires Auth)             |
+| `/api/v1/users/me`                | ✅  | ❌   | ❌  |   ❌   | Get current user info (Requires Auth)    |
 
 ## General API Considerations
 
-*   **Authentication:** Most dashboard endpoints (`/api/user/*`, `/api/shipments/*`, etc.) will require authentication (e.g., validating a JWT token).
-*   **Error Handling:** Implement consistent error responses as shown in the examples below.
-*   **Input Validation:** Validate all incoming request data (body, query params, path params).
-*   **Data Structures:** Define clear request/response data structures (consider using shared TypeScript types if possible).
+*   **Authentication:** Most dashboard/user-specific endpoints require authentication. The backend uses JWT Bearer tokens obtained via the `/login` endpoint. Frontend requests must include the `Authorization: Bearer <token>` header.
+*   **Error Handling:** The backend uses standard HTTP status codes (e.g., 422 for validation, 401 for unauthorized, 404 for not found, 500 for internal errors) and often provides details in the JSON response body (`{"detail": ...}`).
+*   **Input Validation:** FastAPI handles input validation based on Pydantic schemas defined in the backend.
+*   **CORS:** The backend is configured with `CORSMiddleware` allowing `allow_origins=["*"]`, which should permit requests from the frontend development server (`http://localhost:3000`) and deployed frontend origins.
 
 ---
-*(Previous examples for Request/Response, Error Handling, Auth Middleware, Implementation can remain or be updated as needed)*
+*(Previous examples can be removed or updated)*

@@ -35,6 +35,7 @@ export default function Signup() {
 
   // Updated handleSubmit for API integration structure
   const handleSubmit = async (e: React.FormEvent) => {
+    console.log("handleSubmit triggered!"); // Add console log for debugging
     e.preventDefault()
     setError(null) // Clear previous errors
     setIsLoading(true) // Start loading
@@ -47,44 +48,61 @@ export default function Signup() {
     }
 
     try {
-      // --- Placeholder for actual API call ---
-      console.log("Attempting signup with:", formData)
-      // const response = await fetch('/api/auth/signup', { // Target endpoint
-      //   method: 'POST',
-      //   headers: {
-      //     'Content-Type': 'application/json',
-      //   },
-      //   body: JSON.stringify({ // Send relevant data
-      //      fullName: formData.fullName,
-      //      email: formData.email,
-      //      phone: formData.phone,
-      //      password: formData.password
-      //   }),
-      // });
-      // const result = await response.json();
-      // if (!response.ok) {
-      //   throw new Error(result.error?.message || 'Signup failed');
-      // }
-      // console.log('Signup successful:', result);
-      // --- End Placeholder ---
+      // --- Actual API call ---
+      console.log("Attempting signup for email:", formData.email)
 
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Prepare JSON body, mapping frontend camelCase to backend snake_case if necessary
+      const body = JSON.stringify({
+         full_name: formData.fullName, // Match backend schema
+         email: formData.email,
+         phone_number: formData.phone, // Include phone number and match backend schema key
+         password: formData.password
+      })
 
-      // Simulate success for now
-      const simulatedSuccess = true;
+      const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || ''; // Fallback to empty string if not set
+      const response = await fetch(`${apiBaseUrl}/api/v1/users/register`, { // Construct URL with env var
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: body,
+      });
 
-      if (!simulatedSuccess) {
-         throw new Error("Simulated signup failure."); // Example
+      const result = await response.json(); // Try to parse JSON response even on error
+
+      if (!response.ok) {
+        // Handle validation errors (422) or other errors
+        let errorMessage = 'Signup failed. Please check your details and try again.';
+        if (response.status === 422 && result.detail) {
+          // Try to format FastAPI validation errors
+          if (Array.isArray(result.detail)) {
+            errorMessage = result.detail.map((e: any) => `${e.loc?.join('.')} - ${e.msg}`).join('; ');
+          } else if (typeof result.detail === 'string') {
+            errorMessage = result.detail;
+          }
+        } else if (result.detail) {
+           // Handle other errors with a detail message
+           errorMessage = result.detail;
+        }
+        throw new Error(errorMessage);
       }
 
-      // Redirect ONLY after successful signup simulation
-      router.push("/auth/verification")
+      console.log('Signup successful:', result);
+
+      // Redirect ONLY after successful signup
+      router.push("/auth/verification") // Redirect to the updated verification page
 
     } catch (err: any) {
-      // Handle errors
-      console.error('Signup error:', err)
-      setError(err.message || 'An unexpected error occurred during signup.')
+      // Handle errors (from fetch or logic)
+      console.error('Signup error:', err);
+      // Ensure we always set a string message to the error state
+      let displayError = 'An unexpected error occurred during signup.';
+      if (err instanceof Error) {
+        displayError = err.message;
+      } else if (typeof err === 'string') { // Handle cases where a string might be thrown
+        displayError = err;
+      }
+      setError(displayError);
     } finally {
       setIsLoading(false) // Stop loading
     }
@@ -194,7 +212,7 @@ export default function Signup() {
               <p className="text-sm text-red-600 text-center">{error}</p>
             )}
 
-            <Button className="w-full mt-6" disabled={isLoading}>
+            <Button type="submit" className="w-full mt-6" disabled={isLoading}>
               {isLoading ? 'Signing up...' : 'Sign Up'}
             </Button>
           </form>

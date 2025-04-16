@@ -32,38 +32,47 @@ export default function Login() {
     setIsLoading(true) // Start loading
 
     try {
-      // --- Placeholder for actual API call ---
-      console.log("Attempting login with:", formData)
-      // const response = await fetch('/api/auth/login', {
-      //   method: 'POST',
-      //   headers: {
-      //     'Content-Type': 'application/json',
-      //   },
-      //   body: JSON.stringify(formData),
-      // });
-      // const result = await response.json();
-      // if (!response.ok) {
-      //   throw new Error(result.error?.message || 'Login failed');
-      // }
-      // console.log('Login successful:', result);
-      // --- End Placeholder ---
+      // --- Actual API call ---
+      console.log("Attempting login with email:", formData.email) // Log email, not password
 
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Use URLSearchParams for x-www-form-urlencoded
+      const body = new URLSearchParams({
+        username: formData.email, // Backend expects 'username'
+         password: formData.password,
+      })
 
-      // Simulate success for now to keep redirect working
-      const simulatedSuccess = true;
+      const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || ''; // Fallback to empty string if not set
+      const response = await fetch(`${apiBaseUrl}/api/v1/users/login`, { // Construct URL with env var
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded', // Correct Content-Type
+        },
+        body: body, // Send URLSearchParams object
+      });
 
-      if (!simulatedSuccess) {
-         throw new Error("Simulated login failure."); // Example of triggering error
+      const result = await response.json(); // Always try to parse JSON response for potential errors
+
+      if (!response.ok) {
+        // Use error message from backend if available, otherwise provide a generic message
+        throw new Error(result.detail || 'Login failed. Please check your email and password.');
       }
 
-      // Redirect ONLY after successful login simulation
-      router.push("/dashboard")
+      console.log('Login successful, received token:', result.access_token ? '***' : 'No token'); // Don't log the actual token
+
+      // Store the token in localStorage
+      if (result.access_token) {
+        // Prepending "Bearer " is common practice for Authorization header format
+        localStorage.setItem('authToken', `Bearer ${result.access_token}`);
+        // Redirect ONLY after successful login and token storage
+        router.push("/dashboard")
+      } else {
+        // Handle case where login is successful (200 OK) but no token is returned
+        throw new Error('Login succeeded but no token was received.');
+      }
 
     } catch (err: any) {
-      // Handle errors (from fetch or simulated)
-      console.error('Login error:', err)
+      // Handle errors (from fetch or logic)
+      console.error('Login error:', err);
       setError(err.message || 'An unexpected error occurred during login.')
     } finally {
       setIsLoading(false) // Stop loading in all cases (success or error)
