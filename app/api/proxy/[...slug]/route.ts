@@ -44,6 +44,7 @@ async function handler(req: NextRequest, { params }: { params: { slug: string[] 
       // @ts-ignore // undici Agent is compatible with Node's fetch dispatcher
       dispatcher: unsafeAgent,
       redirect: 'manual', // Handle redirects manually if needed, or follow them
+      ...(req.method !== 'GET' && req.method !== 'HEAD' && { duplex: 'half' }), // Add duplex option for requests with a body
     });
 
     // Forward the response from the backend
