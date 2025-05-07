@@ -1,8 +1,10 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect } from "react" // Added useEffect
+import { useState, useEffect } from "react"
 import Image from "next/image"
+import { useRouter } from "next/navigation" // For potential redirects
+import { getCurrentUser, LoggedInUser } from "../../../lib/services/userService" // Corrected import path
 import Link from "next/link"
 import { Mail, Phone, MapPin, Edit, User, Settings, Bell, Lock, Trash2, X, MessageSquare, Package } from "lucide-react"
 import { Card, CardHeader, CardContent, CardFooter } from "@/components/ui/card" // Added CardHeader, CardFooter
@@ -10,13 +12,14 @@ import { Button } from "@/components/ui/button"
 import { IconLabel } from "@/components/ui/icon-label"
 import { FormField, Input, Select, Textarea } from "@/components/ui/form" // Added Select, Textarea
 
-// Define interfaces for the data structures (replace with actual types if available)
+// Define interfaces for the data structures
+// Aligning ProfileData more closely with LoggedInUser, address and memberSince will be placeholders
 interface ProfileData {
-  name: string;
+  name: string; // from full_name
   email: string;
-  phone: string;
-  address: string;
-  memberSince?: string; // Optional example
+  phone: string; // from phone_number
+  address: string; // Placeholder, not in LoggedInUser
+  memberSince?: string; // Placeholder, not in LoggedInUser
 }
 
 interface NotificationSettings {
@@ -43,12 +46,14 @@ export default function ProfilePage() {
   const [showNotification, setShowNotification] = useState(false) // This seems like a generic success/update notification
   const [showContactSupport, setShowContactSupport] = useState(false)
 
+  const router = useRouter(); // Initialize router
   // State for initial page load
   const [isLoadingPage, setIsLoadingPage] = useState(true);
   const [pageError, setPageError] = useState<string | null>(null);
 
   // State for actual data (initialized as null)
-  const [profileData, setProfileData] = useState<ProfileData | null>(null);
+  const [currentUserForProfile, setCurrentUserForProfile] = useState<LoggedInUser | null>(null);
+  // profileData is now effectively represented by currentUserForProfile and editFormData for display/editing
   const [passwordData, setPasswordData] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
   const [notificationSettings, setNotificationSettings] = useState<NotificationSettings | null>(null);
   const [preferences, setPreferences] = useState<Preferences | null>(null);
@@ -87,15 +92,22 @@ export default function ProfilePage() {
         // const settingsResult = await settingsRes.json();
         // --- End Placeholder ---
 
-        // Simulate API delay and data
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        const simulatedProfileData: ProfileData = {
-          name: "Joy Williams",
-          email: "joy.williams@example.com",
-          phone: "+234 123 456 7890",
-          address: "123 Main Street, Lekki Phase 1, Lagos, Nigeria",
-          memberSince: "March 2025"
-        };
+        const user = await getCurrentUser();
+        setCurrentUserForProfile(user);
+
+        // Initialize edit form data with fetched user data
+        // Address and memberSince are not in LoggedInUser, so they'll be placeholders
+        setEditFormData({
+          name: user.full_name,
+          email: user.email,
+          phone: user.phone_number,
+          address: "123 Main Street, Lekki Phase 1, Lagos, Nigeria", // Placeholder
+          memberSince: "March 2025" // Placeholder
+        });
+        
+        // Keep simulated settings for now as they are not part of LoggedInUser
+        // Simulate API delay and data for settings
+        await new Promise(resolve => setTimeout(resolve, 500)); // Shorter delay for non-critical
         const simulatedNotificationSettings: NotificationSettings = {
           deliveryUpdates: true,
           promotions: false,
@@ -107,26 +119,45 @@ export default function ProfilePage() {
           theme: "Light",
           defaultPayment: "Card",
         };
-
-        setProfileData(simulatedProfileData);
         setNotificationSettings(simulatedNotificationSettings);
         setPreferences(simulatedPreferences);
-        setEditFormData(simulatedProfileData); // Initialize edit form state
 
       } catch (err: any) {
         console.error("Failed to fetch profile page data:", err);
         setPageError(err.message || "Could not load profile information.");
+        if (err.message === 'No authentication token found. User is not logged in.' || err.message === 'User not authenticated. Please log in again.') {
+          router.push("/auth/login");
+        }
       } finally {
         setIsLoadingPage(false);
       }
     };
 
     fetchInitialData();
-  }, []); // Empty dependency array ensures this runs only once on mount
+  }, [router]); // Added router to dependency array
 
   // Open Edit Profile Modal Handler
   const handleOpenEditProfile = () => {
-    setEditFormData(profileData); // Reset edit form to current profile data
+    if (currentUserForProfile) {
+      setEditFormData({ // Initialize with current user data + placeholders
+        name: currentUserForProfile.full_name,
+        email: currentUserForProfile.email,
+        phone: currentUserForProfile.phone_number,
+        // Preserve existing address/memberSince from editFormData if available, otherwise use default placeholders
+        address: editFormData?.address || "123 Main Street, Lekki Phase 1, Lagos, Nigeria", 
+        memberSince: editFormData?.memberSince || "March 2025" 
+      });
+    } else {
+      // Fallback if currentUserForProfile is somehow null but we are trying to edit
+      // This case should ideally be prevented by UI (e.g., disable edit button if no user)
+       setEditFormData({
+          name: "User",
+          email: "user@example.com",
+          phone: "N/A",
+          address: "123 Main Street, Lekki Phase 1, Lagos, Nigeria",
+          memberSince: "N/A"
+       });
+    }
     setUpdateProfileError(null); // Clear previous errors
     setShowEditProfile(true);
   };
@@ -180,8 +211,16 @@ export default function ProfilePage() {
       // --- End Placeholder ---
 
       await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate delay
-      // On success: update the main profileData state and close modal
-      setProfileData(editFormData);
+      // On success: update the main currentUserForProfile state and close modal
+      // Assuming editFormData now holds the updated full_name, email, phone
+      if (currentUserForProfile) { // Ensure currentUserForProfile is not null
+        setCurrentUserForProfile(prevUser => ({
+          ...(prevUser as LoggedInUser), // Type assertion
+          full_name: editFormData.name,
+          email: editFormData.email,
+          phone_number: editFormData.phone,
+        }));
+      }
       setShowEditProfile(false);
       // Optionally show success notification
       setShowNotification(true);
@@ -352,9 +391,14 @@ export default function ProfilePage() {
     return <div className="p-6 text-center text-red-600">Error loading profile: {pageError}</div>;
   }
 
-  if (!profileData || !notificationSettings || !preferences) {
-    // This case should ideally not be reached if loading/error states are handled properly
-    return <div className="p-6 text-center">Could not load profile data.</div>;
+  // Use currentUserForProfile for display, and ensure notificationSettings/preferences are loaded
+  if (!currentUserForProfile || !notificationSettings || !preferences) {
+    // If still loading, show the loading indicator
+    if (isLoadingPage) {
+       return <div className="p-6 text-center">Loading profile information...</div>;
+    }
+    // Otherwise, if data is missing after loading, show error
+    return <div className="p-6 text-center">Could not load complete profile data. Please try again later.</div>;
   }
 
   // --- Main Component Return ---
@@ -402,8 +446,10 @@ export default function ProfilePage() {
               <Edit className="w-4 h-4" />
             </button>
           </div>
-          <h3 className="text-xl font-medium mt-4">{profileData.name}</h3>
-          <p className="text-sm text-gray-500">Member since {profileData.memberSince || "N/A"}</p>
+          {/* Display fetched name */}
+          <h3 className="text-xl font-medium mt-4">{currentUserForProfile.full_name}</h3>
+          {/* Member since is still a placeholder */}
+          <p className="text-sm text-gray-500">Member since {editFormData?.memberSince || "N/A"}</p>
 
           {/* Action Buttons */}
           <div className="mt-6 w-full space-y-2">
@@ -435,9 +481,12 @@ export default function ProfilePage() {
             </Button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-            <Card><IconLabel icon={<Mail className="w-5 h-5 text-primary" />} label={profileData.email} description="Email" /></Card>
-            <Card><IconLabel icon={<Phone className="w-5 h-5 text-primary" />} label={profileData.phone} description="Phone" /></Card>
-            <Card className="md:col-span-2"><IconLabel icon={<MapPin className="w-5 h-5 text-primary" />} label={profileData.address} description="Address" /></Card>
+            {/* Display fetched email */}
+            <Card><IconLabel icon={<Mail className="w-5 h-5 text-primary" />} label={currentUserForProfile.email} description="Email" /></Card>
+            {/* Display fetched phone number */}
+            <Card><IconLabel icon={<Phone className="w-5 h-5 text-primary" />} label={currentUserForProfile.phone_number} description="Phone" /></Card>
+            {/* Address is still a placeholder, display from editFormData */}
+            <Card className="md:col-span-2"><IconLabel icon={<MapPin className="w-5 h-5 text-primary" />} label={editFormData?.address || "N/A"} description="Address" /></Card>
           </div>
 
           {/* Notification Settings */}
