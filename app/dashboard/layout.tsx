@@ -3,9 +3,10 @@
 import type React from "react"
 import Link from "next/link"
 import Image from "next/image"
-import { usePathname } from "next/navigation"
-import { Home, Package, Clock, User, LogOut, Bell, Menu, X } from "lucide-react"
-import { useState } from "react"
+import { usePathname, useRouter } from "next/navigation" // Added useRouter
+import { Home, Package, Clock, User, LogOut, Bell, Menu, X, Loader2 } from "lucide-react" // Added Loader2
+import { useState, useEffect } from "react" // Added useEffect
+import { getCurrentUser, LoggedInUser } from "../../lib/services/userService" // Corrected path for userService
 
 export default function DashboardLayout({
   children,
@@ -13,7 +14,31 @@ export default function DashboardLayout({
   children: React.ReactNode
 }) {
   const pathname = usePathname()
+  const router = useRouter() // Initialize router
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [currentUser, setCurrentUser] = useState<LoggedInUser | null>(null)
+  const [isLoadingUser, setIsLoadingUser] = useState(true)
+
+  useEffect(() => {
+    const fetchUserData = async () => {
+      setIsLoadingUser(true);
+      try {
+        const user = await getCurrentUser();
+        setCurrentUser(user);
+      } catch (error: any) {
+        console.error("DashboardLayout: Failed to fetch current user:", error);
+        // If token is not found or invalid, redirect to login
+        if (error.message === 'No authentication token found. User is not logged in.' || error.message === 'User not authenticated. Please log in again.') {
+          router.push("/auth/login");
+        }
+        // Optionally set an error state here if you want to display an error in the layout
+      } finally {
+        setIsLoadingUser(false);
+      }
+    };
+
+    fetchUserData();
+  }, [router]);
 
   // Function to check if a path is active (exact match or starts with for nested routes)
   const isActive = (path: string) => {
@@ -228,12 +253,18 @@ export default function DashboardLayout({
             </Link>
 
             <div className="flex items-center">
-              <span className="mr-2 text-sm font-medium hidden sm:inline">Joy Williams</span>
+              {isLoadingUser ? (
+                <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+              ) : (
+                <span className="mr-2 text-sm font-medium hidden sm:inline">
+                  {currentUser?.full_name || "User"}
+                </span>
+              )}
               <Link href="/dashboard/profile">
                 <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full overflow-hidden cursor-pointer hover:ring-2 hover:ring-primary transition-all">
                   <Image
-                    src="/images/user-avatar.png"
-                    alt="User Avatar"
+                    src={currentUser?.email ? `/images/user-avatar.png` : "/images/placeholder-user.jpg"} // Placeholder logic, ideally avatar URL comes from user object
+                    alt={currentUser?.full_name || "User Avatar"}
                     width={40}
                     height={40}
                     className="object-cover"
@@ -250,4 +281,3 @@ export default function DashboardLayout({
     </div>
   )
 }
-
