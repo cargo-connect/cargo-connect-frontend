@@ -5,6 +5,7 @@ import type React from "react"
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Eye, EyeOff } from "lucide-react"
+import { registerUser, UserRegistrationPayload } from "../../../lib/services/userService" // Adjusted path
 import Image from "next/image"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -48,52 +49,32 @@ export default function Signup() {
     }
 
     try {
-      // --- Actual API call ---
-      console.log("Attempting signup for email:", formData.email)
+      console.log("Attempting signup for email:", formData.email);
 
-      // Prepare JSON body, mapping frontend camelCase to backend snake_case if necessary
-      const body = JSON.stringify({
-         full_name: formData.fullName, // Match backend schema
-         email: formData.email,
-         phone_number: formData.phone, // Include phone number and match backend schema key
-         password: formData.password
-      })
+      const payload: UserRegistrationPayload = {
+        full_name: formData.fullName,
+        email: formData.email,
+        phone_number: formData.phone,
+        password: formData.password,
+      };
 
-      const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || ''; // Fallback to empty string if not set
-      const response = await fetch(`${apiBaseUrl}/api/v1/users/register`, { // Construct URL with env var
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: body,
-      });
-
-      const result = await response.json(); // Try to parse JSON response even on error
-
-      if (!response.ok) {
-        // Handle validation errors (422) or other errors
-        let errorMessage = 'Signup failed. Please check your details and try again.';
-        if (response.status === 422 && result.detail) {
-          // Try to format FastAPI validation errors
-          if (Array.isArray(result.detail)) {
-            errorMessage = result.detail.map((e: any) => `${e.loc?.join('.')} - ${e.msg}`).join('; ');
-          } else if (typeof result.detail === 'string') {
-            errorMessage = result.detail;
-          }
-        } else if (result.detail) {
-           // Handle other errors with a detail message
-           errorMessage = result.detail;
-        }
-        throw new Error(errorMessage);
-      }
+      const result = await registerUser(payload);
 
       console.log('Signup successful:', result);
 
       // Redirect ONLY after successful signup
-      router.push("/auth/verification") // Redirect to the updated verification page
+      // Assuming result.message indicates success, or result itself is truthy
+      // The actual condition might depend on the structure of UserRegistrationResponse
+      if (result) { // Or check result.message or a specific success field
+        router.push("/auth/verification"); // Redirect to the updated verification page
+      } else {
+        // This case might not be hit if registerUser throws on non-JSON/empty success
+        // or if UserRegistrationResponse always implies success if no error is thrown.
+        setError("Signup seemed to succeed but returned an unexpected response.");
+      }
 
     } catch (err: any) {
-      // Handle errors (from fetch or logic)
+      // Handle errors (from registerUser service or logic)
       console.error('Signup error:', err);
       // Ensure we always set a string message to the error state
       let displayError = 'An unexpected error occurred during signup.';

@@ -5,6 +5,7 @@ import type React from "react"
 import { useState } from "react" // No need for useEffect here yet
 import { useRouter } from "next/navigation"
 import { Eye, EyeOff } from "lucide-react"
+import { loginUser, UserLoginCredentials } from "../../../lib/services/userService" // Adjusted path
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { FormField, Input } from "@/components/ui/form" // Assuming FormField and Input are correctly defined/imported
@@ -32,46 +33,33 @@ export default function Login() {
     setIsLoading(true) // Start loading
 
     try {
-      // --- Actual API call ---
-      console.log("Attempting login with email:", formData.email) // Log email, not password
+      console.log("Attempting login with email:", formData.email);
 
-      // Use URLSearchParams for x-www-form-urlencoded
-      const body = new URLSearchParams({
-        username: formData.email, // Backend expects 'username'
-         password: formData.password,
-      })
+      const credentials: UserLoginCredentials = {
+        email: formData.email,
+        password: formData.password,
+      };
 
-      const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || ''; // Fallback to empty string if not set
-      const response = await fetch(`${apiBaseUrl}/api/v1/users/login`, { // Construct URL with env var
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded', // Correct Content-Type
-        },
-        body: body, // Send URLSearchParams object
-      });
+      const result = await loginUser(credentials); // result is UserLoginResponse
 
-      const result = await response.json(); // Always try to parse JSON response for potential errors
-
-      if (!response.ok) {
-        // Use error message from backend if available, otherwise provide a generic message
-        throw new Error(result.detail || 'Login failed. Please check your email and password.');
-      }
-
-      console.log('Login successful, received token:', result.access_token ? '***' : 'No token'); // Don't log the actual token
+      console.log('Login successful, received token:', result.access_token ? '***' : 'No token');
+      // console.log('User data from login:', result.user); // Optionally log user data
 
       // Store the token in localStorage
       if (result.access_token) {
-        // Prepending "Bearer " is common practice for Authorization header format
         localStorage.setItem('authToken', `Bearer ${result.access_token}`);
-        // Redirect ONLY after successful login and token storage
-        router.push("/dashboard")
+        // Optionally store user data from login response if needed immediately,
+        // though typically /me endpoint is called for fresh data.
+        // localStorage.setItem('currentUser', JSON.stringify(result.user));
+        
+        router.push("/dashboard");
       } else {
-        // Handle case where login is successful (200 OK) but no token is returned
-        throw new Error('Login succeeded but no token was received.');
+        // This case should ideally be caught by loginUser service if token is missing in a success response
+        throw new Error('Login succeeded but no access token was received.');
       }
 
     } catch (err: any) {
-      // Handle errors (from fetch or logic)
+      // Handle errors (from loginUser service or logic)
       console.error('Login error:', err);
       setError(err.message || 'An unexpected error occurred during login.')
     } finally {
